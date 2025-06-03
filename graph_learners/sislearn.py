@@ -1,14 +1,25 @@
 import networkx as nx
 import numpy as np
 
-"""
-Code for SISLearn, which learns the underlying SIS network from infection history.
+"""Inclusion-exclusion based SIS network learner.
+
+Provides functions to compute mu and nu estimates for neighbor inference
+and the SISLearner class for reconstructing the underlying infection graph.
 """
 
 
 def compute_estimate(node, nodes_to_check, inf_hist, other_node_prev):
-    # Vectorized computation of mu estimates
-    # Compute current states: Y(node_u) == 0 & Y(node_i) == other_node_prev for all nodes_to_check
+    """Compute mu estimates for candidate neighbors of a given node.
+
+    Args:
+        node (int): Index of the target node.
+        nodes_to_check (array-like): Array of candidate neighbor indices.
+        inf_hist (numpy.ndarray): Infection history of shape (T, N).
+        other_node_prev (bool): Condition on neighbor being infected (True) or healthy (False).
+
+    Returns:
+        numpy.ndarray: Mu estimates for each candidate neighbor.
+    """
 
     if other_node_prev:
         current = (~inf_hist[:-1, node:node + 1] & inf_hist[:-1, nodes_to_check])
@@ -26,6 +37,17 @@ def compute_estimate(node, nodes_to_check, inf_hist, other_node_prev):
 
 
 def compute_nu_estimate(node_u, node_i, u_neighbor_superset_bool, inf_hist):
+    """Compute the nu estimate for a node pair under inclusion-exclusion.
+
+    Args:
+        node_u (int): Index of the target node.
+        node_i (int): Index of the potential neighbor.
+        u_neighbor_superset_bool (numpy.ndarray): Boolean mask for supersets of u's neighbors.
+        inf_hist (numpy.ndarray): Infection history of shape (T, N).
+
+    Returns:
+        float: Estimated nu parameter for the node pair.
+    """
     u_neighbor_superset_bool = u_neighbor_superset_bool.copy()
     cond1 = (inf_hist[:, node_u] == 0) & (inf_hist[:, node_i] == 1)
     cond1[-1] = False  # since we cant observe the next round, we remove the last round
@@ -63,42 +85,22 @@ def compute_nu_estimate(node_u, node_i, u_neighbor_superset_bool, inf_hist):
     return nu_est
 
 
+def learn_neighbors(node, node_list, inf_hist, mu_thresh, nu_thresh,
+                    known_neighbors_bool=None, with_pruning=True):
+    """Identify a superset of potential neighbors for a given node.
 
-def compute_nu_estimate_shortcut(node_u, node_i, u_neighbor_superset_bool, inf_hist):
-    # Exclude the last time step to avoid rolling
-    effective_inf_hist = inf_hist[:-1]
-    next_inf_hist = inf_hist[1:]
+    Args:
+        node (int): Index of the target node.
+        node_list (numpy.ndarray): Array of all node indices.
+        inf_hist (numpy.ndarray): Infection history of shape (T, N).
+        mu_thresh (float): Threshold for mu estimates to include a candidate.
+        nu_thresh (float): Threshold for nu estimates for pruning.
+        known_neighbors_bool (numpy.ndarray, optional): Boolean mask of already known neighbors.
+        with_pruning (bool): Whether to apply nu-based pruning.
 
-    # Compute cond1 and cond2
-    cond1 = (~effective_inf_hist[:, node_u]) & effective_inf_hist[:, node_i]
-    cond2 = (~effective_inf_hist[:, node_u]) & (~effective_inf_hist[:, node_i])
-
-    # Compute the number of conditions
-    num_cond1 = cond1.sum()
-    num_cond2 = cond2.sum()
-
-    # Compute the state of node_u in the next time step
-    next_round = next_inf_hist[:, node_u]
-
-    # Compute new conditions without using np.roll
-    new_cond_1 = cond1 & next_round
-    new_cond_2 = cond2 & next_round
-
-    # Sum the new conditions
-    num_new_cond1 = new_cond_1.sum()
-    num_new_cond2 = new_cond_2.sum()
-
-    # Calculate estimates, handling division by zero
-    cond1_est = num_new_cond1 / num_cond1 if num_cond1 > 0 else 0.0
-    cond2_est = num_new_cond2 / num_cond2 if num_cond2 > 0 else 0.0
-
-    # Calculate and return the nu estimate
-    nu_estimate = cond1_est - cond2_est
-
-    return nu_estimate
-
-
-def learn_neighbors(node, node_list, inf_hist, mu_thresh, nu_thresh, known_neighbors_bool=None, with_pruning=True):
+    Returns:
+        numpy.ndarray: Boolean mask indicating the learned neighbor superset.
+    """
     if known_neighbors_bool is None:
         known_neighbors_bool = np.zeros(len(node_list), dtype=bool)
 
@@ -111,11 +113,7 @@ def learn_neighbors(node, node_list, inf_hist, mu_thresh, nu_thresh, known_neigh
     nodes_to_check = node_list[mask]
 
     mu_estimates = compute_estimate(node, nodes_to_check, inf_hist, other_node_prev=True)
-
-    # Update the superset based on mu_thresh
-    pass_mu = mu_estimates >= mu_thresh
-    u_neighbor_superset_bool[nodes_to_check] = pass_mu
-
+    u_neighbor_superset_bool[nodes_to_check] = mu_estimates >= mu_thresh
 
     if with_pruning:
         mu_estimates_2 = compute_estimate(node, nodes_to_check, inf_hist, other_node_prev=False)
@@ -123,15 +121,28 @@ def learn_neighbors(node, node_list, inf_hist, mu_thresh, nu_thresh, known_neigh
 
         # Use a standard deviation multiplier to determine the threshold (works better in practice)
         nu_thresh = nu_estimates.mean() + 2 * nu_estimates.std()
-
-        fail_nu = nu_estimates >= nu_thresh
-        u_neighbor_superset_bool[nodes_to_check] = u_neighbor_superset_bool[nodes_to_check] & fail_nu
+        prune_mask = nu_estimates >= nu_thresh
+        u_neighbor_superset_bool[nodes_to_check] &= prune_mask
 
     return u_neighbor_superset_bool
 
 
-class CILearner:
-    def __init__(self, n_nodes, max_num_rounds, mu_eps, nu_eps, p_inf, max_deg, with_pruning=True, max_num_rounds_used=None):
+class SISLearner:
+    """Learner implementing inclusion-exclusion algorithm for SIS network inference.
+
+    Args:
+        n_nodes (int): Number of nodes in the network.
+        max_num_rounds (int): Maximum number of observation rounds.
+        mu_eps (float): Tolerance for mu estimates.
+        nu_eps (float): Tolerance for nu estimates.
+        p_inf (float): Infection probability of the SIS model.
+        max_deg (int): Maximum degree bound for nodes.
+        with_pruning (bool): Whether to apply nu-based pruning.
+        max_num_rounds_used (int, optional): Number of rounds to use for inference.
+    """
+    def __init__(self, n_nodes, max_num_rounds, mu_eps, nu_eps, p_inf,
+                 max_deg, with_pruning=True, max_num_rounds_used=None):
+        """Initialize the SISLearner with observation parameters and thresholds."""
         self.inf_hist = np.ascontiguousarray(np.zeros((max_num_rounds, n_nodes), dtype=bool))
         self.n_nodes = n_nodes
         self.t = 0
@@ -142,17 +153,27 @@ class CILearner:
         self.with_pruning = with_pruning
         self.max_num_rounds_used = max_num_rounds_used if max_num_rounds_used is not None else max_num_rounds
 
-        # ensure that eps_nu is not too large
         if 0 < p_inf < 1:
-            assert 2 * nu_eps < p_inf * (1 - p_inf) ** (max_deg - 1), f"nu_eps is {nu_eps} but should be less than {p_inf * (1 - p_inf) ** (max_deg - 1) / 2}"
+            assert 2 * nu_eps < p_inf * (1 - p_inf) ** (max_deg - 1), (
+                f"nu_eps is {nu_eps} but should be less than "
+                f"{p_inf * (1 - p_inf) ** (max_deg - 1) / 2}"
+            )
 
 
 
     def observe(self, previous_infected, current_infected):
+        """Record infection observations for a new time step.
+
+        Args:
+            previous_infected (Iterable[int] or set): Nodes infected at previous round.
+            current_infected (Iterable[int] or set): Nodes infected at current round.
+
+        Raises:
+            ValueError: If the number of rounds exceeds the allocated history size.
+        """
         if self.t >= self.inf_hist.shape[0]:
             raise ValueError("Too many rounds")
 
-        # if set convert to list
         if isinstance(previous_infected, set):
             previous_infected = list(previous_infected)
         if isinstance(current_infected, set):
@@ -166,6 +187,11 @@ class CILearner:
 
 
     def get_inferred_network(self):
+        """Reconstruct the network graph from recorded infection history.
+
+        Returns:
+            networkx.Graph: Inferred undirected network graph.
+        """
         # construct the graph using Algorithm LearnNeighbors node by node
         g = nx.Graph()
         g.add_nodes_from(range(self.n_nodes))

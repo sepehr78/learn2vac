@@ -1,10 +1,20 @@
+"""Vaccination strategy based on node degree centrality."""
 from typing import List
 
 from vaccination_strats.vaccinator import Vaccinator
 
 
 class DegreeVaccinator(Vaccinator):
+    """Vaccinator selecting high-degree nodes for immunization."""
     def get_vaccination_list(self, current_infected) -> List[int]:
+        """Select top-degree nodes not yet vaccinated.
+
+        Args:
+            current_infected (Sequence[int]): Nodes currently infected.
+
+        Returns:
+            List[int]: Nodes selected for vaccination.
+        """
         if self.is_over_budget():
             return []
 

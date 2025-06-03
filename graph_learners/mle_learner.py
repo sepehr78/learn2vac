@@ -1,12 +1,30 @@
 import networkx as nx
 import numpy as np
 
-# implementation of the MLE learner from Epidemiologic network inference (Barbillon et al. 2020)
-
-
+"""
+Implementation of the MLE learner from "Epidemiologic network inference" (Barbillon et al. 2020)
+"""
 
 class MLELearner:
+    """MLE-based learner for SIS network inference.
+
+    Args:
+        n_nodes (int): Number of nodes in the network.
+        max_num_rounds (int): Maximum number of observation rounds.
+        p_inf (float): Infection probability of the SIS model.
+        p_rec (float): Recovery probability of the SIS model.
+        thresh (float): Threshold for edge inclusion based on estimated probabilities.
+    """
     def __init__(self, n_nodes, max_num_rounds, p_inf, p_rec, thresh=0.5):
+        """Initialize the MLE learner.
+
+        Args:
+            n_nodes (int): Number of nodes in the network.
+            max_num_rounds (int): Maximum number of observation rounds.
+            p_inf (float): Infection probability beta.
+            p_rec (float): Recovery probability gamma.
+            thresh (float): Threshold for edge inclusion.
+        """
         self.inf_hist = np.zeros((max_num_rounds, n_nodes), dtype=bool)
         self.n_nodes = n_nodes
         self.t = 0
@@ -15,7 +33,16 @@ class MLELearner:
         self.thresh = thresh
 
     def compute_psi_ij(self, node_i, node_j, t):
-        # assuming beta_ij (the prior) is 1
+        """Compute transition probability estimate psi_{ij,t}.
+
+        Args:
+            node_i (int): Index of potential source node.
+            node_j (int): Index of target node.
+            t (int): Time step index.
+
+        Returns:
+            float: Estimated psi value for the given nodes at time t.
+        """
         Y_ti = self.inf_hist[t, node_i]
         Y_tj = self.inf_hist[t, node_j]
         Y_t1j = self.inf_hist[t + 1, node_j]
@@ -46,6 +73,15 @@ class MLELearner:
                 return 1  # stays healthy
 
     def observe(self, previous_infected, current_infected):
+        """Record infection observations for a new time step.
+
+        Args:
+            previous_infected (Iterable[int] or set): Nodes infected at previous round.
+            current_infected (Iterable[int] or set): Nodes infected at current round.
+
+        Raises:
+            ValueError: If the number of rounds exceeds the allocated history size.
+        """
         if self.t >= self.inf_hist.shape[0]:
             raise ValueError("Too many rounds")
 
@@ -61,11 +97,10 @@ class MLELearner:
         self.inf_hist[self.t, current_infected] = True
         self.t += 1
     def compute_all_psi(self):
-        """
-        Vectorized computation of psi_ij,t for all i, j, t using nested np.where.
+        """Vectorized computation of psi for all node pairs over time.
 
         Returns:
-        - psi: NumPy array of shape (T-1, N, N)
+            numpy.ndarray: Array of shape (T-1, N, N) containing psi values.
         """
         T, N = self.inf_hist.shape
         e = self.p_rec
@@ -107,11 +142,10 @@ class MLELearner:
         return psi  # Shape: (T-1, N, N)
 
     def get_inferred_network(self):
-        """
-        Infers the network based on infection history using vectorized operations.
+        """Infer network based on infection history using vectorized operations.
 
         Returns:
-        - g: A NetworkX graph with inferred edges.
+            networkx.Graph: Inferred undirected graph.
         """
         g = nx.Graph()
         g.add_nodes_from(range(self.n_nodes))

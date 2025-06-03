@@ -1,3 +1,8 @@
+"""Closed-walk vaccination strategy for SIS model.
+
+This module defines WalkVaccinator, which selects nodes to vaccinate by
+maximizing the reduction in closed walks of a specified length k.
+"""
 import warnings
 from typing import List
 import networkx as nx
@@ -6,27 +11,35 @@ from vaccination_strats.vaccinator import Vaccinator
 warnings.simplefilter("error", RuntimeWarning)
 
 class WalkVaccinator(Vaccinator):
-    def __init__(self, budget: int, num_rounds: int, num_nodes: int, learner_class, k=None):
-        """
-        Initializes the ClosedWalkVaccinator.
+    """Vaccinator based on closed-walk counts of fixed length k.
+
+    At each round, selects nodes whose removal maximally reduces the total number
+    of closed walks of length k in the inferred network.
+    """
+    def __init__(self, budget: int, num_rounds: int, num_nodes: int,
+                 learner_class, k: int = None):
+        """Initialize a WalkVaccinator.
 
         Args:
-            learner: The learner object that provides the inferred network.
-            budget: The vaccination budget.
-            k (int): The length of closed walks to consider.
+            budget (int): Total number of vaccinations allowed.
+            num_rounds (int): Number of vaccination rounds.
+            num_nodes (int): Number of nodes in the network.
+            learner_class (Type): Learner class for inferring the network.
+            k (int, optional): Length of closed walks to consider. Defaults to
+                ceil(log(num_nodes) / log(1.1)).
         """
         super().__init__(budget, num_rounds, num_nodes, learner_class)
-        self.k = k if k is not None else np.ceil(np.log(num_nodes) / np.log(1 + 0.1)).astype(int)
+        self.k = (k if k is not None else
+                  np.ceil(np.log(num_nodes) / np.log(1 + 0.1)).astype(int))
 
     def get_vaccination_list(self, current_infected) -> List[int]:
-        """
-        Selects the node to vaccinate based on the number of closed walks of length k.
+        """Select nodes to vaccinate based on closed-walk counts.
 
         Args:
-            current_infected: A list of currently infected nodes.
+            current_infected (Sequence[int]): Nodes currently infected.
 
         Returns:
-            A list containing the index of the node to vaccinate.
+            List[int]: Indices of nodes selected for vaccination.
         """
         if self.is_over_budget():
             return []

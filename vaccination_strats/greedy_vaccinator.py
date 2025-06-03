@@ -1,3 +1,7 @@
+"""
+Our Greedy algorithm:
+Greedy vaccination strategy minimizing the spectral radius via heuristic removal.
+"""
 from typing import List
 
 import networkx as nx
@@ -10,7 +14,20 @@ from vaccination_strats.vaccinator import Vaccinator
 
 
 class SpectralVaccinator(Vaccinator):
+    """Vaccinator using a greedy heuristic to approximate spectral radius minimization.
+
+    Implements Algorithm 4: at each round, remove nodes to maximally decrease the
+    spectral radius of the inferred network.
+    """
     def get_vaccination_list(self, current_infected) -> List[int]:
+        """Select nodes to vaccinate by greedily minimizing post-removal spectral radius.
+
+        Args:
+            current_infected (Sequence[int]): Nodes currently infected.
+
+        Returns:
+            List[int]: Indices of nodes selected for vaccination.
+        """
         if self.is_over_budget():
             return []
 

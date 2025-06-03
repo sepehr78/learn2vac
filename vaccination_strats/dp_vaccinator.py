@@ -1,3 +1,8 @@
+"""
+Our DP algorithm:
+Dynamic programming vaccination strategy for bounded-treewidth graphs.
+"""
+
 from typing import List
 
 from dp_alg import nice_tree_decomp, conv_nx_nt_to_treenode, compute_treewidth_from_PACE
@@ -5,15 +10,39 @@ from dp_alg.tree_decomp_vacc import min_spec_rad_with_nt
 from vaccination_strats.vaccinator import Vaccinator
 
 
-# code for the optimal treewidth vaccinator that uses bottom-up dyanmic programming
+"""Code for the optimal treewidth vaccinator using bottom-up dynamic programming."""
 
 class TWVaccinator(Vaccinator):
-    def __init__(self, budget: int, num_rounds: int, num_nodes: int, learner_class, tw_lower=None, tw_upper=None):
+    """Vaccinator using exact dynamic programming on tree decompositions.
+
+    For graphs with bounded treewidth, computes the optimal set of nodes
+    whose removal minimizes the spectral radius in polynomial time.
+    """
+    def __init__(self, budget: int, num_rounds: int, num_nodes: int,
+                 learner_class, tw_lower: int = None, tw_upper: int = None):
+        """Initialize a TWVaccinator.
+
+        Args:
+            budget (int): Total number of vaccinations allowed.
+            num_rounds (int): Number of vaccination rounds.
+            num_nodes (int): Number of nodes in the network.
+            learner_class (Type): Learner class for inferring the network.
+            tw_lower (int, optional): Lower bound on treewidth. Defaults to None.
+            tw_upper (int, optional): Upper bound on treewidth. Defaults to None.
+        """
         super().__init__(budget, num_rounds, num_nodes, learner_class)
         self.tw_lower = tw_lower
         self.tw_upper = tw_upper
 
     def get_vaccination_list(self, current_infected) -> List[int]:
+        """Select nodes by exact spectral radius minimization on graphs.
+
+        Args:
+            current_infected (Sequence[int]): Nodes currently infected.
+
+        Returns:
+            List[int]: Nodes selected for vaccination to optimally reduce spectral radius.
+        """
         if self.is_over_budget():
             return []
 
