@@ -1,0 +1,18 @@
+# Core dependencies
+networkx
+numpy
+scipy
+
+# Optimization solvers
+pulp
+
+# Progress bars and data visualization
+tqdm
+pandas
+matplotlib
+seaborn
+
+# Just-in-time compilation
+numba
+
+# For DP algorithm (tree-decomposition): requires SageMath installation (not pip-installable)
