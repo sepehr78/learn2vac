@@ -121,9 +121,10 @@ class SISNetwork:
         """Get the infection status of all nodes in the network.
 
         Returns:
-            numpy.ndarray: A binary array where 1 indicates that the node is infected and 0 indicates that the node is susceptible.
+            numpy.ndarray: A boolean array where ``True`` indicates the node is
+            infected and ``False`` indicates the node is susceptible.
         """
-        # return a list of 0s and 1s, where 1 indicates that the node is infected
+        # return a boolean array, where True indicates that the node is infected
         return np.asarray([1 if node in self.infected else 0 for node in self.graph.nodes()], dtype=bool)
 
 
